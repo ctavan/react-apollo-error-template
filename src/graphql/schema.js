@@ -25,9 +25,40 @@ const QueryType = new GraphQLObjectType({
   fields: {
     people: {
       type: new GraphQLList(PersonType),
-      resolve: () => peopleData,
+      resolve: () => {
+        console.log('Serving people from server', peopleData);
+        return peopleData;
+      },
     },
   },
 });
 
-export const schema = new GraphQLSchema({ query: QueryType });
+const addPersonType = new GraphQLObjectType({
+  name: 'addPerson',
+  fields: {
+    id: { type: GraphQLID },
+    name: { type: GraphQLString },
+  },
+});
+
+const MutationType = new GraphQLObjectType({
+  name: 'Mutation',
+  fields: {
+    addPerson: {
+      type: addPersonType,
+      args: {
+        id: { type: GraphQLID },
+        name: { type: GraphQLString },
+      },
+      resolve: (parent, person) => {
+        peopleData.push(person);
+        return person;
+      },
+    },
+  },
+});
+
+export const schema = new GraphQLSchema({
+  query: QueryType,
+  mutation: MutationType,
+});
