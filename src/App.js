@@ -1,81 +1,57 @@
-import React, { useState } from "react";
-import { gql, useQuery, useMutation } from "@apollo/client";
+import React, { useState, useEffect } from 'react';
+import { gql, useApolloClient } from '@apollo/client';
 
-const ALL_PEOPLE = gql`
-  query AllPeople {
-    people {
-      id
-      name
-    }
-  }
-`;
-
-const ADD_PERSON = gql`
-  mutation AddPerson($name: String) {
-    addPerson(name: $name) {
-      id
-      name
-    }
+const FIRST_QUERY = gql`
+  query FirstIntendedQuery {
+    valueIWantToQuery
   }
 `;
 
 export default function App() {
-  const [name, setName] = useState('');
-  const {
-    loading,
-    data,
-  } = useQuery(ALL_PEOPLE);
+  const apolloClient = useApolloClient();
+  const [firstError, setFirstError] = useState(null);
+  const [secondError, setSecondError] = useState(null);
 
-  const [addPerson] = useMutation(ADD_PERSON, {
-    update: (cache, { data: { addPerson: addPersonData } }) => {
-      const peopleResult = cache.readQuery({ query: ALL_PEOPLE });
+  useEffect(() => {
+    try {
+      // As of @apollo/client 3.0 the ROOT_QUERY is apparently empty until the first *real* graphql
+      // query happened. This leads to `apolloClient.readQuery()` _not_ throwing when the store is
+      // still in that completely empty state. Once there is a value in the store, readQuery will
+      // throw as expected.
+      apolloClient.readQuery({ query: FIRST_QUERY });
+    } catch (err) {
+      setFirstError(err);
+    }
 
-      cache.writeQuery({
-        query: ALL_PEOPLE,
+    // Once we write something to the store and repeat readQuery for some missing values, we get
+    // the expected error:
+    try {
+      apolloClient.writeQuery({
+        query: gql`
+          query RootQueryInit {
+            rootQueryInit
+          }
+        `,
         data: {
-          ...peopleResult,
-          people: [
-            ...peopleResult.people,
-            addPersonData,
-          ],
+          rootQueryInit: true,
         },
       });
-    },
-  });
+      apolloClient.readQuery({ query: FIRST_QUERY });
+    } catch (err) {
+      setSecondError(err);
+    }
+  }, []);
 
   return (
     <main>
       <h1>Apollo Client Issue Reproduction</h1>
       <p>
-        This application can be used to demonstrate an error in Apollo Client.
+        When running client.readQuery on an entirely empty store it fails silently because
+        ROOT_QUERY does not exist yet:
       </p>
-      <div className="add-person">
-        <label htmlFor="name">Name</label>
-        <input 
-          type="text" 
-          name="name" 
-          value={name}
-          onChange={evt => setName(evt.target.value)}
-        />
-        <button
-          onClick={() => {
-            addPerson({ variables: { name } });
-            setName('');
-          }}
-        >
-          Add person
-        </button>
-      </div>
-      <h2>Names</h2>
-      {loading ? (
-        <p>Loading…</p>
-      ) : (
-        <ul>
-          {data?.people.map(person => (
-            <li key={person.id}>{person.name}</li>
-          ))}
-        </ul>
-      )}
+      <pre>{JSON.stringify(firstError, null, 2)}</pre>
+      <p>Only after adding something to the store it fails with the expected error:</p>
+      <pre>{JSON.stringify(secondError, null, 2)}</pre>
     </main>
   );
 }
